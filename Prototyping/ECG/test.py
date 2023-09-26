@@ -1,16 +1,19 @@
 import machine
+import time
 from machine import Pin
 from time import sleep
 
-# pin = Pin("LED", Pin.OUT)
+pin = Pin("LED", Pin.OUT)
 
 # while True:
 #     pin.toggle()
 #     sleep(1)
     
 # Initialize SPI
+print("Initializing SPI")
 spi = machine.SPI(0, baudrate=1000000, polarity=0, phase=0, sck=machine.Pin(18), mosi=machine.Pin(19), miso=machine.Pin(16))
 cs = machine.Pin(17, machine.Pin.OUT)
+cs.high()
 
 def read_mcp3008(channel):
     """
@@ -24,16 +27,19 @@ def read_mcp3008(channel):
     command |= (channel & 0x07) << 3  
     
     # Send & receive data
-    cs.value(0)  
+    cs.low() 
     response = bytearray(3)
     spi.write_readinto(command.to_bytes(1, 'big') + bytes([0, 0]), response)
-    cs.value(1)  
+    cs.high()
+    
     
     # Extract ADC value from response
     adc_value = ((response[0] & 0x01) << 9) | (response[1] << 1) | (response[2] >> 7)
     
-    return adc_value
+    return adc_value, f"{response}"
 
 
-value = read_mcp3008(0)
-print("ADC Value from Channel 0:", value)
+while True:
+    value, str = read_mcp3008(0)
+    print(f"ADC Value Ch 0: {value*3.3/1024}")
+    time.sleep(1)
