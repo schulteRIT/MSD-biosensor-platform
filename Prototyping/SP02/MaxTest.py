@@ -1,85 +1,102 @@
 import Max30100
-from sys import exit
-import utime
-import machine
-import time
-
+from machine import Timer, Pin
+from time import sleep
 MODE_HR = 0x02
 MODE_SPO2 = 0x03
+led = machine.Pin('LED', machine.Pin.OUT) #configure LED Pin as an output pin and create and led object for Pin class
+timeInterval = 0 # global variable
+lastTimeInterval = 0 # global variable
 
-
-mx30 = Max30100.MAX30100()
-utime.sleep_ms(1000)
-startTime,endTime,maxIR,ir=0,0,0,0
-rising, falling = False, False
-c=False
-counter=0
-threshold=800
-bpm_range=[40,200]
-last_bpm, last_beat_time = 0,0
-mx30.set_mode(Max30100.MODE_SPO2)
-def get_pulse():
-    global last_bpm, last_beat_time
-
-    # Read the analog value from the pulse sensor
-    sensor_value = mx30.ir
-
-    # Check if a beat is detected
-    if sensor_value > threshold:
-        current_time = time.ticks_ms()
-        time_since_last_beat = current_time - last_beat_time
-
-        # Calculate heart rate in beats per minute (BPM)
-        bpm = 60000 / time_since_last_beat
-        print ("bpm "+str(bpm))
-        # Check if the BPM is within a reasonable range
-        if bpm > bpm_range[0] and bpm < bpm_range[1]:
-            last_bpm = bpm
-            last_beat_time = current_time
-
-    return last_bpm
-
-c=0
+def interruption_handler(pin):
+    global timeInterval
+    timeInterval += 1
 
 def adjO2():
+    a=[]
     mx30.set_mode(MODE_SPO2)  # Trigger an initial temperature read.
-    mx30.read_sensor()
-    if(mx30.red!=0):
-        print(mx30.ir/mx30.red)
-    
-    
-    
-#while True:
- #   adjO2()
 
-while True:
-    mx30.set_mode(MODE_SPO2)  # Trigger an initial temperature read.
-    mx30.read_sensor()
-    if(mx30.ir!=0 and mx30.red!=0):
-        O2Saturation = mx30.ir/mx30.red
-        O2Saturation_adj = O2Saturation
-        if(O2Saturation_adj>1):
-            O2Saturation_adj=1
-        print("SPO2:" + str(O2Saturation_adj))
-        #time.sleep(1)
+    for i in range(0, 250):
+        mx30.read_sensor()
+        if(mx30.red!=0 and mx30.ir!=0):
+            b=mx30.ir/mx30.red
+            a.append(b);
+    if(len(a)!=0):
+        avg = sum(a)/len(a)
+        if(avg>=1):
+            avg=1
+        print("average SPO2 in 1/500000 of a second: " + str(avg))
+        a.clear()
+    else:
+        print ("no SPO2 detected please insert finger")
+        
+if __name__ == "__main__":
+    data=[]
+    soft_timer = Timer(mode=Timer.PERIODIC, period=1, callback=interruption_handler)
+    mx30 = Max30100.MAX30100()
+    d=0
+    mx30.set_mode(MODE_HR)  # Trigger an initial temperature
+    y=0
+    z=[]
+    rising=falling=False
+    state=0
+    while False:
+        mx30.read_sensor()
+        print(mx30.ir)
+    if(True):
+        while True:
+            #adjO2()
+            #time.sleep(1)
+            for i in range(50):
+                mx30.read_sensor()
+                a=mx30.ir
+            mx30.read_sensor()
+            if(mx30.ir>a and state ==0):
+                timeInterval=0
+                rising = True
+                state=1
+            elif (state==0):
+                timeInterval=0
+                state=1
+                falling=True
+                
+            if(rising and mx30.ir<a):
+                bpm = 60000/timeInterval
+                if(bpm<120):
+                    print("bpm : " + str(60000/timeInterval))
+                    led.value(True)  #turn on the LED
+                    
 
-# The latest values are now available via .ir and .red
-    print("ir " + str(mx30.ir))
-    print("red " + str(mx30.red))
-    mx30.set_mode(MODE_HR)  # Trigger an initial temperature read.
-    mx30.read_sensor()
-    if(mx30.ir!=0):
-        heart_rate = (60000/mx30.ir)*17
-        #print("Heart Rate: {:.1f} BPM".format(heart_rate))
-        print("hear rate : "+ str(heart_rate))
-    mx30.refresh_temperature()
-    temperature = mx30.get_temperature()
-    temperature_adj = temperature+.6
-    print("Temperature :"+str(temperature_adj))
-    c+=1
-    if(c>=10):
-        time.sleep(1)
-        c=0
+                    data.append(timeInterval)
+                    timeInterval=0
+                    if(len(data)!=0):
+                        s=sorted(data)
+                        median = s[(len(data)//2)-1]
+                        
+                        print("bpm ave:" +str(60000/median))
 
-    
+
+            elif(falling and mx30.ir>a):
+                bpm = 60000/timeInterval
+                if(bpm<120):
+                    print("bpm : " + str(60000/timeInterval))
+                    led.value(True)  #turn on the LED
+
+                    data.append(timeInterval)
+                    timeInterval=0
+                
+                    if(len(data)!=0):
+                        s=sorted(data)
+                        median = s[(len(data)//2)-1]
+                        
+                        print("bpm ave:" +str(60000/median))
+
+
+            a=0
+            c=0
+            
+            #time.sleep(1)
+            led.value(False)  #turn on the LED
+
+        
+
 
